@@ -60,6 +60,8 @@ FONT_CANDIDATES = [
     "/System/Library/Fonts/Supplemental/Arial.ttf",
     "/System/Library/Fonts/Helvetica.ttc",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "C:/Windows/Fonts/segoeui.ttf",
+    "C:/Windows/Fonts/arial.ttf",
 ]
 
 DISPLAY_H = 540

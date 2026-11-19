@@ -75,25 +75,93 @@
 
 ## Запуск
 
-```bash
-uv venv --python 3.15 .venv
-source .venv/bin/activate
-uv pip install -r requirements.txt
+Нужны Windows (x64) или macOS (Apple Silicon) и веб-камера. Python и git заранее ставить
+не нужно.
 
-python capture.py --person ivan   # съёмка датасета в data/raw/
-python train.py --rebuild         # признаки, оценка, model.joblib
-python demo.py                    # живое демо с веб-камеры
+### 1. Установить uv
+
+uv — менеджер пакетов, который сам скачает нужную версию Python.
+
+macOS, в программе «Терминал»:
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Windows, в PowerShell:
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+После установки закройте и заново откройте терминал, чтобы команда `uv` стала доступна.
+
+### 2. Скачать проект и модель
+
+1. На странице репозитория: **Code → Download ZIP**, распакуйте архив. Репозиторий
+   приватный: чтобы его видеть, нужно приглашение от владельца.
+2. В разделе **Releases → v1.0** скачайте `model.joblib` и положите его в распакованную
+   папку, рядом с `demo.py`.
+
+Если установлен GitHub CLI, то же самое одной командой:
+`gh repo clone andrew-jordan-spbu/gesture-classification`, затем в папке проекта
+`gh release download v1.0 -p model.joblib`.
+
+### 3. Создать окружение
+
+Перейдите в папку проекта (подставьте свой путь) и установите зависимости:
+
+```bash
+cd ~/Downloads/gesture-classification-main
+uv venv --python 3.15
+uv pip install -r requirements.txt
+```
+
+На Windows путь пишется так: `cd $HOME\Downloads\gesture-classification-main`.
+
+Проверьте версию Python: на macOS `.venv/bin/python --version`, на Windows
+`.venv\Scripts\python --version`. Должно быть `Python 3.15.x`. Если в номере есть `b` или
+`rc` (предварительная версия), обновите uv (`uv self update`), удалите папку `.venv`
+и повторите этот шаг.
+
+### 4. Разрешить доступ к камере
+
+- **macOS:** при первом запуске система спросит, можно ли Терминалу использовать камеру, —
+  разрешите. Если окна не было: «Системные настройки → Конфиденциальность и безопасность →
+  Камера», включите Терминал и перезапустите его.
+- **Windows:** «Параметры → Конфиденциальность и защита → Камера», включите «Разрешить
+  классическим приложениям доступ к камере».
+
+### 5. Запустить
+
+| | macOS | Windows |
+|---|---|---|
+| Живое демо | `.venv/bin/python demo.py` | `.venv\Scripts\python demo.py` |
+| Съёмка датасета | `.venv/bin/python capture.py --person ivan` | `.venv\Scripts\python capture.py --person ivan` |
+| Обучение | `.venv/bin/python train.py --rebuild` | `.venv\Scripts\python train.py --rebuild` |
+
+Клавиши демо: `q` — выход, `+` / `-` — порог уверенности, `m` — зеркало, `s` — снимок.
+
+Обучение нужно, только если у вас есть свой датасет в `data/raw/`. Готовая модель обучена
+на scikit-learn 1.9.1 (эта версия закреплена в `requirements.txt`) и загружается только им,
+вместе с `features.py` из того же релиза. После изменения признаков модель нужно переобучить.
+
+### Съёмка без установки
+
+`capture.html` открывается в Chrome или Edge на Windows и Mac, ничего ставить не нужно.
+Страница снимает кадры с той же разметкой и сохраняет их zip-архивом. Архив распаковывается
+в папку `data/` проекта:
+
+macOS:
+```bash
+for z in ~/Downloads/gestures_*.zip; do unzip -n "$z" -d data/; done
+```
+
+Windows (PowerShell):
+```powershell
+Get-ChildItem $HOME\Downloads\gestures_*.zip | ForEach-Object { Expand-Archive $_ -DestinationPath data -Force }
 ```
 
 `opencv-contrib-python` нужен для каскадов Хаара (поиск лица). С обычным `opencv-python`
 всё работает, но без исключения лица.
-
-**Съёмка без установки.** `capture.html` открывается в Chrome или Edge на Windows и Mac,
-снимает кадры с той же разметкой и сохраняет их zip-архивом. Архив распаковывается в `data/`:
-
-```bash
-for z in ~/Downloads/gestures_*.zip; do unzip -n "$z" -d data/; done
-```
 
 ## Данные
 
