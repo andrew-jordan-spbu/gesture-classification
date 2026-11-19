@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Съёмка датасета жестов</title>
+<style>
+  :root {
+    --bg: #1f2125; --panel: #2a2d32; --line: #3a3e45; --text: #e8e8e8; --muted: #9aa0a6;
+    --accent: #ffd27a; --hand: #8fd3ff; --ok: #7ee08a; --warn: #ff9b7a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.4 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center;
+           padding: 10px 16px; border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 17px; margin: 0 8px 0 0; font-weight: 600; }
+  label.f { display: flex; gap: 6px; align-items: center; color: var(--muted); }
+  input, select, button { font: inherit; color: var(--text); background: var(--panel);
+                          border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; }
+  button { cursor: pointer; }
+  button:hover { border-color: #5a606a; }
+  button.primary { background: #2f6f3e; border-color: #3d8a4f; }
+  button.danger { background: #5a2a2a; border-color: #7a3a3a; }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 430px; gap: 14px; padding: 14px 16px; }
+  @media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
+  .video-wrap { position: relative; background: #000; border-radius: 8px; overflow: hidden;
+                aspect-ratio: 16 / 9; }
+  video { width: 100%; height: 100%; object-fit: contain; transform: scaleX(-1); display: block; }
+  .flash { position: absolute; inset: 0; border: 6px solid var(--ok); opacity: 0;
+           transition: opacity .25s; pointer-events: none; }
+  .flash.on { opacity: 1; transition: none; }
+  .overlay { position: absolute; left: 12px; top: 10px; background: rgba(0,0,0,.55);
+             padding: 6px 10px; border-radius: 6px; font-size: 18px; }
+  .overlay b { color: var(--accent); }
+  .msg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+         text-align: center; padding: 24px; color: var(--muted); }
+  .tips { margin-top: 10px; color: var(--muted); font-size: 14px; }
+  .tips li { margin: 2px 0; }
+  aside { background: var(--panel); border-radius: 8px; padding: 12px 14px; }
+  aside h2 { font-size: 20px; margin: 0 0 8px; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; align-items: center; }
+  .chip { padding: 4px 9px; border-radius: 14px; border: 1px solid var(--line); background: var(--bg);
+          cursor: pointer; font-size: 14px; }
+  .chip.on { border-color: var(--accent); color: var(--accent); }
+  .chip.hand.on { border-color: var(--hand); color: var(--hand); }
+  .k { color: var(--muted); font-size: 12px; margin-left: 2px; }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 14px; }
+  th, td { padding: 3px 4px; text-align: center; border-bottom: 1px solid var(--line); }
+  th:first-child, td:first-child { text-align: left; }
+  td.done { color: var(--ok); }
+  td.cur { outline: 2px solid var(--hand); outline-offset: -2px; border-radius: 4px; }
+  tr.curv td:first-child { color: var(--accent); }
+  .classes { columns: 2; column-gap: 12px; font-size: 14px; margin-top: 6px; }
+  .classes div { cursor: pointer; padding: 1px 4px; border-radius: 4px; display: flex;
+                 justify-content: space-between; break-inside: avoid; }
+  .classes div.on { background: var(--bg); color: var(--accent); }
+  .classes div.full span:last-child { color: var(--ok); }
+  .total { margin: 8px 0; color: var(--muted); }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .status { margin-top: 8px; font-size: 13px; color: var(--muted); min-height: 1.4em; }
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none;
+           align-items: center; justify-content: center; }
+  .modal.on { display: flex; }
+  .modal > div { background: var(--panel); padding: 18px 20px; border-radius: 10px; max-width: 420px; }
+  .modal .actions { justify-content: flex-end; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Съёмка датасета жестов</h1>
+  <label class="f">Ваше имя
+    <input id="person" size="12" placeholder="ivan" autocomplete="off"></label>
+  <label class="f">Камера <select id="camera"></select></label>
+  <span id="res" class="k"></span>
+</header>
+
+<main>
+  <section>
+    <div class="video-wrap">
+      <video id="video" autoplay playsinline muted></video>
+      <div class="overlay" id="overlay"></div>
+      <div class="flash" id="flash"></div>
+      <div class="msg" id="camMsg">Разрешите браузеру доступ к камере.</div>
+    </div>
+    <ul class="tips">
+      <li><b>Пробел</b> — снять кадр. Показывайте жест, который выбран справа: класс, вариант, рука и сторона.</li>
+      <li>Фон за рукой — однотонная светлая стена, рука ближе к камере, чем лицо. Рукав можно не закатывать.</li>
+      <li>Меняйте расстояние до камеры, наклон руки и положение в кадре между кадрами — одинаковые кадры не помогают.</li>
+      <li>Цель — по <b><span id="targetTxt"></span> кадра</b> на каждую клетку таблицы (обе руки, ладонью и тыльной стороной).</li>
+      <li>Кадры хранятся в этом браузере, пока вы не нажмёте «Очистить». В конце нажмите «Скачать zip» и отправьте файл.</li>
+    </ul>
+  </section>
+
+  <aside>
+    <h2 id="clsTitle"></h2>
+    <div class="row" id="variants"></div>
+    <div class="row">
+      <span class="chip hand" data-hand="R">правая</span>
+      <span class="chip hand" data-hand="L">левая</span><span class="k">[h]</span>
+      &nbsp;
+      <span class="chip hand" data-side="palm">ладонь</span>
+      <span class="chip hand" data-side="back">тыл</span><span class="k">[s]</span>
+    </div>
+    <table id="table"></table>
+    <div class="classes" id="classes"></div>
+    <div class="total" id="total"></div>
+    <div class="actions">
+      <button class="primary" id="shoot">Снять (пробел)</button>
+      <button id="undo">Отменить последний (u)</button>
+      <button id="download">Скачать zip</button>
+      <button class="danger" id="clear">Очистить</button>
+    </div>
+    <div class="status" id="status"></div>
+    <div class="k" style="margin-top:6px">n / p — следующий / предыдущий класс, v — вариант жеста</div>
+  </aside>
+</main>
+
+<div class="modal" id="modal"><div>
+  <div id="modalText"></div>
+  <div class="actions"><button id="modalNo">Отмена</button><button class="danger" id="modalYes">Да</button></div>
+</div></div>
+
+<canvas id="canvas" style="display:none"></canvas>
+
+<script id="zip">
+// ---------- ZIP без сжатия (JPEG и так сжат), без внешних библиотек ----------
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+
+function crc32(bytes) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+function dosDateTime(d) {
+  const time = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+  const date = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+  return [time, date];
+}
+
+// files: [{name, blob, crc, size, date}] -> Blob (application/zip)
+function buildZip(files) {
+  const enc = new TextEncoder();
+  const parts = [], central = [];
+  let offset = 0;
+  for (const f of files) {
+    const name = enc.encode(f.name);
+    const [time, date] = dosDateTime(f.date || new Date());
+    const h = new DataView(new ArrayBuffer(30));
+    h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true);
+    h.setUint16(8, 0, true); h.setUint16(10, time, true); h.setUint16(12, date, true);
+    h.setUint32(14, f.crc, true); h.setUint32(18, f.size, true); h.setUint32(22, f.size, true);
+    h.setUint16(26, name.length, true); h.setUint16(28, 0, true);
+    parts.push(h.buffer, name, f.blob);
+    const c = new DataView(new ArrayBuffer(46));
+    c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true);
+    c.setUint16(8, 0x0800, true); c.setUint16(10, 0, true); c.setUint16(12, time, true);
+    c.setUint16(14, date, true); c.setUint32(16, f.crc, true); c.setUint32(20, f.size, true);
+    c.setUint32(24, f.size, true); c.setUint16(28, name.length, true); c.setUint16(30, 0, true);
+    c.setUint16(32, 0, true); c.setUint16(34, 0, true); c.setUint16(36, 0, true);
+    c.setUint32(38, 0, true); c.setUint32(42, offset, true);
+    central.push(c.buffer, name);
+    offset += 30 + name.length + f.size;
+  }
+  const cdSize = central.reduce((s, p) => s + (p.byteLength ?? p.length), 0);
+  const e = new DataView(new ArrayBuffer(22));
+  e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true);
+  e.setUint32(12, cdSize, true); e.setUint32(16, offset, true);
+  return new Blob([...parts, ...central, e.buffer], { type: "application/zip" });
+}
+</script>
+
+<script>
+// ---------- Классы: те же коды, что в capture.py и train.py ----------
+const CLASSES = [
+  ["kamen", "Камень (кулак)", [["-", "кулак"]]],
+  ["bumaga", "Бумага (ладонь)", [["-", "раскрытая ладонь"]]],
+  ["nozhnitsy", "Ножницы", [["IM", "указательный + средний"], ["MR", "средний + безымянный"], ["RL", "безымянный + мизинец"]]],
+  ["klass", "Класс", [["-", "большой палец вверх"]]],
+  ["ok", "ОК", [["-", "кольцо из большого и указательного, остальные разогнуты"]]],
+  ["koza", "Коза", [["IL", "указательный + мизинец"], ["TIL", "большой + указательный + мизинец"]]],
+  ["pozvoni", "Позвони мне", [["-", "большой + мизинец"]]],
+  ["pistolet", "Пистолет", [["-", "большой + указательный буквой L"]]],
+  ["tri", "Три пальца", [["IMR", "указательный + средний + безымянный"], ["MRL", "средний + безымянный + мизинец"]]],
+  ["fiksiki", "Фиксики", [["-", "большой + указательный + средний"]]],
+  ["drugoy", "Другой жест", [["one", "один указательный"], ["four", "четыре пальца"], ["middle", "средний палец"],
+                             ["fig", "кукиш"], ["crossed", "скрещённые пальцы"], ["edge", "ладонь ребром"],
+                             ["other", "что-то ещё"]]],
+];
+const SHORT = { "-": "—", IM: "У+С", MR: "С+Бз", RL: "Бз+М", IL: "У+М", TIL: "Б+У+М", IMR: "У+С+Бз", MRL: "С+Бз+М",
+                one: "1 палец", four: "4 пальца", middle: "средний", fig: "кукиш", crossed: "скрещ.",
+                edge: "ребро", other: "другое" };
+const COMBOS = [["R", "palm"], ["R", "back"], ["L", "palm"], ["L", "back"]];
+const TARGET = 3;
+
+const st = { ci: 0, vi: 0, hand: "R", side: "palm" };
+let shots = [];           // {name, cls, variant, hand, side, blob, crc, size, date}
+const $ = (id) => document.getElementById(id);
+document.getElementById("targetTxt").textContent = TARGET;
+
+// ---------- имя: транслитерация и только безопасные символы ----------
+const TR = { а:"a",б:"b",в:"v",г:"g",д:"d",е:"e",ё:"e",ж:"zh",з:"z",и:"i",й:"y",к:"k",л:"l",м:"m",н:"n",о:"o",
+             п:"p",р:"r",с:"s",т:"t",у:"u",ф:"f",х:"h",ц:"ts",ч:"ch",ш:"sh",щ:"sch",ъ:"",ы:"y",ь:"",э:"e",ю:"yu",я:"ya" };
+function personId() {
+  const raw = $("person").value.trim().toLowerCase();
+  const s = [...raw].map(ch => TR[ch] ?? ch).join("").replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
+  return s || "anon";
+}
+try { $("person").value = localStorage.getItem("gc_person") || ""; } catch (e) {}
+$("person").addEventListener("input", () => { try { localStorage.setItem("gc_person", $("person").value); } catch (e) {} });
+$("person").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); e.target.blur(); } });
+
+// ---------- хранение кадров в IndexedDB (переживает перезагрузку страницы) ----------
+let db = null;
+function openDb() {
+  return new Promise((resolve) => {
+    try {
+      const req = indexedDB.open("gesture-capture", 1);
+      req.onupgradeneeded = () => req.result.createObjectStore("shots", { keyPath: "name" });
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    } catch (e) { resolve(null); }
+  });
+}
+function dbDo(mode, fn) {
+  return new Promise((resolve) => {
+    if (!db) return resolve(null);
+    try {
+      const tx = db.transaction("shots", mode);
+      const r = fn(tx.objectStore("shots"));
+      tx.oncomplete = () => resolve(r && r.result);
+      tx.onerror = () => resolve(null);
+    } catch (e) { resolve(null); }
+  });
+}
+
+// ---------- камера ----------
+const video = $("video");
+let stream = null;
+async function startCamera(deviceId) {
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  const c = { width: { ideal: 1280 }, height: { ideal: 720 } };
+  if (deviceId) c.deviceId = { exact: deviceId };
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: c, audio: false });
+  } catch (e) {
+    $("camMsg").textContent = "Камера недоступна: " + e.name +
+      ". Откройте файл в Chrome или Edge и разрешите доступ к камере (значок камеры в адресной строке).";
+    $("camMsg").style.display = "flex";
+    return;
+  }
+  video.srcObject = stream;
+  $("camMsg").style.display = "none";
+  video.onloadedmetadata = () => { $("res").textContent = `${video.videoWidth}×${video.videoHeight}`; };
+  const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput");
+  const cur = stream.getVideoTracks()[0].getSettings().deviceId;
+  $("camera").innerHTML = devs.map((d, i) =>
+    `<option value="${d.deviceId}" ${d.deviceId === cur ? "selected" : ""}>${d.label || "Камера " + (i + 1)}</option>`).join("");
+}
+$("camera").addEventListener("change", (e) => startCamera(e.target.value));
+
+// ---------- съёмка ----------
+function stamp(d) {
+  const p = (n, w = 2) => String(n).padStart(w, "0");
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}-${p(d.getMilliseconds(), 3)}`;
+}
+async function shoot() {
+  if (!video.videoWidth) { status("Камера ещё не готова."); return; }
+  const canvas = $("canvas");
+  canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+  canvas.getContext("2d").drawImage(video, 0, 0);          // исходный кадр, без зеркала
+  const blob = await new Promise(r => canvas.toBlob(r, "image/jpeg", 0.95));
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const [cls, , variants] = CLASSES[st.ci];
+  const variant = variants[st.vi][0];
+  const date = new Date();
+  const name = `${cls}__${variant}__${st.hand}__${st.side}__${personId()}__${stamp(date)}.jpg`;
+  const shot = { name, cls, variant, hand: st.hand, side: st.side, blob, crc: crc32(bytes), size: bytes.length, date };
+  shots.push(shot);
+  await dbDo("readwrite", s => s.put(shot));
+  $("flash").classList.add("on"); setTimeout(() => $("flash").classList.remove("on"), 30);
+  status("+ " + name);
+  render();
+}
+async function undo() {
+  const s = shots.pop();
+  if (!s) return;
+  await dbDo("readwrite", st_ => st_.delete(s.name));
+  status("− " + s.name);
+  render();
+}
+function download() {
+  if (!shots.length) { status("Пока нет кадров."); return; }
+  const files = shots.map(s => ({ ...s, name: `raw/${s.cls}/${s.name}` }));
+  const blob = buildZip(files);
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `gestures_${personId()}_${stamp(new Date()).slice(0, 13)}.zip`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  status(`Скачан zip: ${shots.length} кадров, ${(blob.size / 1048576).toFixed(1)} МБ.`);
+}
+function ask(text, onYes) {
+  $("modalText").textContent = text;
+  $("modal").classList.add("on");
+  $("modalYes").onclick = () => { $("modal").classList.remove("on"); onYes(); };
+  $("modalNo").onclick = () => $("modal").classList.remove("on");
+}
+function clearAll() {
+  ask(`Удалить все ${shots.length} кадров из браузера? Сначала скачайте zip, если ещё не скачали.`, async () => {
+    shots = [];
+    await dbDo("readwrite", s => s.clear());
+    status("Все кадры удалены.");
+    render();
+  });
+}
+function status(t) { $("status").textContent = t; }
+
+// ---------- интерфейс ----------
+function count(cls, variant, hand, side) {
+  let n = 0;
+  for (const s of shots) if (s.cls === cls && (variant == null || s.variant === variant)
+      && (hand == null || s.hand === hand) && (side == null || s.side === side)) n++;
+  return n;
+}
+function render() {
+  const [cls, title, variants] = CLASSES[st.ci];
+  const [vcode, vname] = variants[st.vi];
+  $("clsTitle").textContent = `${st.ci + 1}/${CLASSES.length}  ${title}`;
+  $("overlay").innerHTML = `<b>${title}</b>${vcode !== "-" ? " · " + vname : ""} · ` +
+    `${st.hand === "R" ? "правая" : "левая"} · ${st.side === "palm" ? "ладонь" : "тыл"}`;
+  $("variants").innerHTML = variants.map(([c, n], i) =>
+    `<span class="chip ${i === st.vi ? "on" : ""}" data-vi="${i}" title="${n}">${variants.length > 1 ? n : n}</span>`).join("") +
+    (variants.length > 1 ? '<span class="k">[v]</span>' : "");
+  document.querySelectorAll("[data-hand]").forEach(e => e.classList.toggle("on", e.dataset.hand === st.hand));
+  document.querySelectorAll("[data-side]").forEach(e => e.classList.toggle("on", e.dataset.side === st.side));
+
+  let t = "<tr><th></th><th>П-лад</th><th>П-тыл</th><th>Л-лад</th><th>Л-тыл</th></tr>";
+  variants.forEach(([c], i) => {
+    t += `<tr class="${i === st.vi ? "curv" : ""}"><td>${SHORT[c]}</td>`;
+    for (const [h, s] of COMBOS) {
+      const n = count(cls, c, h, s);
+      const cur = i === st.vi && h === st.hand && s === st.side;
+      t += `<td class="${n >= TARGET ? "done" : ""} ${cur ? "cur" : ""}">${n}</td>`;
+    }
+    t += "</tr>";
+  });
+  $("table").innerHTML = t;
+
+  $("classes").innerHTML = CLASSES.map(([c, name, vs], i) => {
+    const full = vs.every(([v]) => COMBOS.every(([h, s]) => count(c, v, h, s) >= TARGET));
+    return `<div class="${i === st.ci ? "on" : ""} ${full ? "full" : ""}" data-ci="${i}">` +
+           `<span>${i + 1}. ${name}</span><span>${count(c)}</span></div>`;
+  }).join("");
+  const need = CLASSES.reduce((s, [, , vs]) => s + vs.length * COMBOS.length * TARGET, 0);
+  const have = CLASSES.reduce((s, [c, , vs]) => s + vs.reduce((a, [v]) =>
+    a + COMBOS.reduce((b, [h, sd]) => b + Math.min(TARGET, count(c, v, h, sd)), 0), 0), 0);
+  $("total").textContent = `Всего кадров: ${shots.length} · заполнено ${have} из ${need} (${Math.round(100 * have / need)}%)`;
+}
+
+document.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-vi],[data-ci],[data-hand],[data-side]");
+  if (!el) return;
+  if (el.dataset.vi) st.vi = +el.dataset.vi;
+  if (el.dataset.ci) { st.ci = +el.dataset.ci; st.vi = 0; }
+  if (el.dataset.hand) st.hand = el.dataset.hand;
+  if (el.dataset.side) st.side = el.dataset.side;
+  render();
+});
+$("shoot").onclick = shoot; $("undo").onclick = undo; $("download").onclick = download; $("clear").onclick = clearAll;
+document.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT" || $("modal").classList.contains("on")) return;
+  const k = e.code;   // физическая клавиша: работает при любой раскладке (n = т, h = р ...)
+  const n = CLASSES[st.ci][2].length;
+  if (k === "Space") { e.preventDefault(); shoot(); return; }
+  else if (k === "KeyN") { st.ci = (st.ci + 1) % CLASSES.length; st.vi = 0; }
+  else if (k === "KeyP") { st.ci = (st.ci + CLASSES.length - 1) % CLASSES.length; st.vi = 0; }
+  else if (k === "KeyV") st.vi = (st.vi + 1) % n;
+  else if (k === "KeyH") st.hand = st.hand === "R" ? "L" : "R";
+  else if (k === "KeyS") st.side = st.side === "palm" ? "back" : "palm";
+  else if (k === "KeyU") { undo(); return; }
+  else return;
+  render();
+});
+
+(async () => {
+  db = await openDb();
+  const saved = await dbDo("readonly", s => s.getAll());
+  if (saved && saved.length) {
+    shots = saved.sort((a, b) => a.name < b.name ? -1 : 1);
+    status(`Восстановлено ${shots.length} кадров из прошлой сессии.`);
+  }
+  render();
+  if (!navigator.mediaDevices?.getUserMedia) {
+    $("camMsg").textContent = "Этот браузер не даёт доступ к камере. Откройте файл в Chrome или Edge.";
+    return;
+  }
+  startCamera();
+})();
+</script>
+</body>
+</html>

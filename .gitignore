@@ -1,0 +1,12 @@
+# окружение
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# данные, модель и результаты (в репозиторий не входят)
+data/
+results/
+_debug/
+model.joblib
+*.zip
